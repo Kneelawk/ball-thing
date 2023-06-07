@@ -14,7 +14,12 @@ fn main() {
         .add_state::<AppState>()
         .add_startup_systems((setup_physics, setup_level, setup_player))
         .add_system(mouse_grab)
-        .add_systems((rotate_camera, move_player, move_camera).in_set(OnUpdate(AppState::InGame)))
+        .add_systems((rotate_camera, move_player).in_set(OnUpdate(AppState::InGame)))
+        .add_system(
+            move_camera
+                .in_base_set(CoreSet::PostUpdate)
+                .run_if(in_state(AppState::InGame)),
+        )
         .run();
 }
 
