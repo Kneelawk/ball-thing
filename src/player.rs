@@ -15,8 +15,7 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_player)
             .add_systems(
-                (rotate_camera, jump_player, move_player)
-                    .in_set(OnUpdate(AppState::InGame)),
+                (rotate_camera, jump_player, move_player).in_set(OnUpdate(AppState::InGame)),
             )
             .add_system(
                 move_camera
@@ -95,7 +94,8 @@ pub fn rotate_camera(mut camera: Query<&mut PlayerCamera>, mut mouse: EventReade
 
     for mouse in mouse.iter() {
         camera.yaw += -mouse.delta.x * MOUSE_SPEED;
-        camera.pitch += -mouse.delta.y * MOUSE_SPEED;
+        camera.pitch =
+            (camera.pitch - mouse.delta.y * MOUSE_SPEED).clamp(-PI / 2.0 + 0.001, PI / 2.0 - 0.001);
     }
 }
 
