@@ -1,25 +1,24 @@
 mod level;
 mod player;
 
-use crate::level::setup_level;
-use crate::player::{move_camera, move_player, rotate_camera, setup_player};
+use crate::level::LevelsPlugin;
+use crate::player::PlayerPlugin;
 use bevy::prelude::*;
 use bevy::window::CursorGrabMode;
 use bevy_rapier3d::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(AssetPlugin {
+            watch_for_changes: true,
+            ..default()
+        }))
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_state::<AppState>()
-        .add_startup_systems((setup_physics, setup_level, setup_player))
+        .add_plugin(LevelsPlugin)
+        .add_plugin(PlayerPlugin)
+        .add_startup_system(setup_physics)
         .add_system(mouse_grab)
-        .add_systems((rotate_camera, move_player).in_set(OnUpdate(AppState::InGame)))
-        .add_system(
-            move_camera
-                .in_base_set(CoreSet::PostUpdate)
-                .run_if(in_state(AppState::InGame)),
-        )
         .run();
 }
 

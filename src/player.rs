@@ -1,3 +1,4 @@
+use crate::AppState;
 use bevy::core_pipeline::bloom::{BloomCompositeMode, BloomSettings};
 use bevy::core_pipeline::clear_color::ClearColorConfig;
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -7,6 +8,20 @@ use bevy_rapier3d::prelude::*;
 use std::f32::consts::PI;
 
 const MOUSE_SPEED: f32 = 0.0025;
+
+pub struct PlayerPlugin;
+
+impl Plugin for PlayerPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_startup_system(setup_player)
+            .add_systems((rotate_camera, move_player).in_set(OnUpdate(AppState::InGame)))
+            .add_system(
+                move_camera
+                    .in_base_set(CoreSet::PostUpdate)
+                    .run_if(in_state(AppState::InGame)),
+            );
+    }
+}
 
 pub fn setup_player(
     mut commands: Commands,

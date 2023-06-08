@@ -1,6 +1,14 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
+pub struct LevelsPlugin;
+
+impl Plugin for LevelsPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_startup_system(setup_level);
+    }
+}
+
 pub fn setup_level(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
