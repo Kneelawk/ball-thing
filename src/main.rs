@@ -1,5 +1,6 @@
 mod level;
 mod player;
+mod util;
 
 use crate::level::LevelsPlugin;
 use crate::player::PlayerPlugin;
