@@ -14,7 +14,10 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(setup_player)
-            .add_systems((rotate_camera, move_player).in_set(OnUpdate(AppState::InGame)))
+            .add_systems(
+                (rotate_camera, jump_player, move_player)
+                    .in_set(OnUpdate(AppState::InGame)),
+            )
             .add_system(
                 move_camera
                     .in_base_set(CoreSet::PostUpdate)
@@ -30,7 +33,7 @@ pub fn setup_player(
 ) {
     let player_transform = Transform::from_xyz(0.0, 0.5, 0.0);
     commands
-        .spawn(Player)
+        .spawn(Player::default())
         .insert(PbrBundle {
             mesh: meshes.add(
                 shape::UVSphere {
@@ -52,6 +55,7 @@ pub fn setup_player(
         })
         .insert(Sleeping::disabled())
         .insert(TransformBundle::from_transform(player_transform.clone()))
+        .insert(ActiveEvents::CONTACT_FORCE_EVENTS)
         .with_children(|builder| {
             builder.spawn(PointLightBundle {
                 point_light: PointLight {
@@ -122,6 +126,31 @@ pub fn move_player(
     force.torque = torque;
 }
 
+pub fn jump_player(
+    mut player: Query<(Entity, &mut ExternalForce), With<Player>>,
+    mut events: EventReader<ContactForceEvent>,
+    key: Res<Input<KeyCode>>,
+) {
+    let (player_entity, mut player_force) = player.single_mut();
+
+    let mut jumping = false;
+    for event in events.iter() {
+        if (player_entity == event.collider1 || player_entity == event.collider2)
+            && Vec3::dot(event.max_force_direction, Vec3::Y) > 0.8
+        {
+            if key.pressed(KeyCode::Space) {
+                jumping = true;
+            }
+        }
+    }
+
+    if jumping {
+        player_force.force = Vec3::new(0.0, 150.0, 0.0);
+    } else {
+        player_force.force = Vec3::ZERO;
+    }
+}
+
 pub fn move_camera(
     mut camera: Query<(&mut Transform, &PlayerCamera)>,
     player: Query<&Transform, (With<Player>, Without<PlayerCamera>)>,
@@ -147,7 +176,7 @@ impl Default for PlayerCamera {
         PlayerCamera {
             pitch: -PI / 4.0,
             yaw: 0.0,
-            distance: 4.0,
+            distance: 5.0,
         }
     }
 }
