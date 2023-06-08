@@ -36,6 +36,7 @@ fn setup_physics(mut physics: ResMut<RapierConfiguration>) {
 
 fn mouse_grab(
     mut windows: Query<&mut Window>,
+    cur_state: Res<State<AppState>>,
     mut next_state: ResMut<NextState<AppState>>,
     mut physics: ResMut<RapierConfiguration>,
     mouse: Res<Input<MouseButton>>,
@@ -43,14 +44,14 @@ fn mouse_grab(
 ) {
     let mut window = windows.single_mut();
 
-    if mouse.just_pressed(MouseButton::Left) {
+    if cur_state.0 == AppState::Menu && mouse.just_pressed(MouseButton::Left) {
         next_state.set(AppState::InGame);
         window.cursor.visible = false;
         window.cursor.grab_mode = CursorGrabMode::Locked;
         physics.physics_pipeline_active = true;
     }
 
-    if key.just_pressed(KeyCode::Escape) {
+    if cur_state.0 == AppState::InGame && key.just_pressed(KeyCode::Escape) {
         next_state.set(AppState::Menu);
         window.cursor.visible = true;
         window.cursor.grab_mode = CursorGrabMode::None;
