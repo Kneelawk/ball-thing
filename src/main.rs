@@ -64,8 +64,12 @@ fn pause_game(
     mut next_state: ResMut<NextState<AppState>>,
     key: Res<Input<KeyCode>>,
 ) {
-    if cur_state.0 == AppState::InGame && key.just_pressed(KeyCode::Escape) {
-        next_state.set(AppState::PauseMenu);
+    if key.just_pressed(KeyCode::Escape) {
+        if cur_state.0 == AppState::InGame {
+            next_state.set(AppState::PauseMenu);
+        } else if cur_state.0 == AppState::PauseMenu {
+            next_state.set(AppState::InGame);
+        }
     }
 }
 
