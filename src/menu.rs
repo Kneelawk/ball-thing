@@ -1,5 +1,6 @@
 use crate::level::LevelState;
 use crate::AppState;
+use bevy::ecs::system::EntityCommands;
 use bevy::prelude::*;
 
 pub struct MenuPlugin;
@@ -9,62 +10,140 @@ const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(spawn_main_menu)
+        app.add_systems((manage_main_menu, manage_pause_menu))
             .add_system(button_background)
-            .add_system(start.in_base_set(CoreSet::PostUpdate));
+            .add_system(start_listener)
+            .add_systems((resume_listener, main_menu_listener));
     }
 }
 
 #[derive(Default, Debug, Copy, Clone, Component)]
-pub struct StartGame;
-
-#[derive(Default, Debug, Copy, Clone, Component)]
 pub struct MainMenu;
 
-fn spawn_main_menu(
+#[derive(Default, Debug, Copy, Clone, Component)]
+pub struct StartGameButton;
+
+#[derive(Default, Debug, Copy, Clone, Component)]
+pub struct PauseMenu;
+
+#[derive(Default, Debug, Copy, Clone, Component)]
+pub struct ResumeGameButton;
+
+#[derive(Default, Debug, Copy, Clone, Component)]
+pub struct MainMenuButton;
+
+fn manage_main_menu(
     app_state: Res<State<AppState>>,
-    main_menu_query: Query<(), With<MainMenu>>,
+    main_menu_query: Query<Entity, With<MainMenu>>,
     mut commands: Commands,
     assets: Res<AssetServer>,
 ) {
-    if app_state.is_changed() && app_state.0 == AppState::MainMenu && main_menu_query.is_empty() {
-        commands
-            .spawn(NodeBundle {
-                style: Style {
-                    size: Size::width(Val::Percent(100.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                ..default()
-            })
-            .insert(MainMenu)
-            .with_children(|parent| {
-                parent
-                    .spawn(ButtonBundle {
-                        background_color: NORMAL_BUTTON.into(),
+    if app_state.is_changed() {
+        if app_state.0 == AppState::MainMenu {
+            if main_menu_query.is_empty() {
+                commands
+                    .spawn(NodeBundle {
                         style: Style {
-                            size: Size::new(Val::Px(150.0), Val::Px(65.0)),
-                            justify_content: JustifyContent::Center,
+                            size: Size::width(Val::Percent(100.0)),
                             align_items: AlignItems::Center,
+                            justify_content: JustifyContent::Center,
                             ..default()
                         },
                         ..default()
                     })
-                    .insert(StartGame)
+                    .insert(MainMenu)
                     .with_children(|parent| {
-                        parent.spawn(TextBundle::from_section(
+                        spawn_button(
+                            parent,
+                            Size::new(Val::Px(150.0), Val::Px(65.0)),
                             "Load",
-                            TextStyle {
-                                font: assets.load("fonts/FiraSans-Bold.ttf"),
-                                font_size: 40.0,
-                                color: Color::rgb(0.9, 0.9, 0.9),
-                                ..default()
-                            },
-                        ));
+                            &assets,
+                        )
+                        .insert(StartGameButton);
                     });
-            });
+            }
+        } else {
+            if let Some(menu) = main_menu_query.iter().next() {
+                commands.entity(menu).despawn_recursive();
+            }
+        }
     }
+}
+
+fn manage_pause_menu(
+    app_state: Res<State<AppState>>,
+    pause_menu_query: Query<Entity, With<PauseMenu>>,
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+) {
+    if app_state.is_changed() {
+        if app_state.0 == AppState::PauseMenu {
+            if pause_menu_query.is_empty() {
+                commands
+                    .spawn(NodeBundle {
+                        style: Style {
+                            flex_direction: FlexDirection::Column,
+                            size: Size::width(Val::Percent(100.0)),
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::Center,
+                            ..default()
+                        },
+                        ..default()
+                    })
+                    .insert(PauseMenu)
+                    .with_children(|parent| {
+                        spawn_button(
+                            parent,
+                            Size::new(Val::Px(200.0), Val::Px(65.0)),
+                            "Resume",
+                            &assets,
+                        )
+                        .insert(ResumeGameButton);
+                        spawn_button(
+                            parent,
+                            Size::new(Val::Px(200.0), Val::Px(65.0)),
+                            "Main Menu",
+                            &assets,
+                        )
+                        .insert(MainMenuButton);
+                    });
+            }
+        } else {
+            if let Some(menu) = pause_menu_query.iter().next() {
+                commands.entity(menu).despawn_recursive();
+            }
+        }
+    }
+}
+
+fn spawn_button<'a, 'w, 's>(
+    parent: &'a mut ChildBuilder<'w, 's, '_>,
+    size: Size,
+    text: impl Into<String>,
+    assets: &Res<AssetServer>,
+) -> EntityCommands<'w, 's, 'a> {
+    let mut commands = parent.spawn(ButtonBundle {
+        background_color: NORMAL_BUTTON.into(),
+        style: Style {
+            size,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        ..default()
+    });
+    commands.with_children(|parent| {
+        parent.spawn(TextBundle::from_section(
+            text,
+            TextStyle {
+                font: assets.load("fonts/FiraSans-Bold.ttf"),
+                font_size: 40.0,
+                color: Color::rgb(0.9, 0.9, 0.9),
+                ..default()
+            },
+        ));
+    });
+    commands
 }
 
 fn button_background(
@@ -83,19 +162,43 @@ fn button_background(
     }
 }
 
-fn start(
-    start_game: Query<&Interaction, (Changed<Interaction>, With<StartGame>)>,
-    main_menu: Query<Entity, With<MainMenu>>,
-    mut commands: Commands,
+fn start_listener(
+    start_game: Query<&Interaction, (Changed<Interaction>, With<StartGameButton>)>,
     mut level_state: ResMut<LevelState>,
     mut app_state: ResMut<NextState<AppState>>,
     assets: Res<AssetServer>,
 ) {
     for &interaction in start_game.iter() {
         if interaction == Interaction::Clicked {
-            commands.entity(main_menu.single()).despawn_recursive();
             app_state.set(AppState::Loading);
             level_state.handle = Some(assets.load("levels/level0.level.kdl"));
+            return;
+        }
+    }
+}
+
+fn resume_listener(
+    resume_game: Query<&Interaction, (Changed<Interaction>, With<ResumeGameButton>)>,
+    mut app_state: ResMut<NextState<AppState>>,
+) {
+    for &interaction in resume_game.iter() {
+        if interaction == Interaction::Clicked {
+            app_state.set(AppState::InGame);
+            return;
+        }
+    }
+}
+
+fn main_menu_listener(
+    main_menu: Query<&Interaction, (Changed<Interaction>, With<MainMenuButton>)>,
+    mut level_state: ResMut<LevelState>,
+    mut app_state: ResMut<NextState<AppState>>,
+) {
+    for &interaction in main_menu.iter() {
+        if interaction == Interaction::Clicked {
+            app_state.set(AppState::MainMenu);
+            level_state.handle = None;
+            return;
         }
     }
 }

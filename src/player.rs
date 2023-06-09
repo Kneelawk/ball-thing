@@ -52,11 +52,11 @@ pub fn setup_camera(mut commands: Commands) {
         });
 }
 
-pub fn no_player_exists(player: Query<Entity, With<Player>>) -> bool {
+pub fn no_player_exists(player: Query<(), With<Player>>) -> bool {
     player.is_empty()
 }
 
-pub fn player_exists(player: Query<Entity, With<Player>>) -> bool {
+pub fn player_exists(player: Query<(), With<Player>>) -> bool {
     !no_player_exists(player)
 }
 
@@ -121,7 +121,7 @@ pub fn remove_player(
 ) {
     if let Some(_) = level_remove.iter().next() {
         for player in players.iter() {
-            commands.entity(player).despawn();
+            commands.entity(player).despawn_recursive();
         }
     }
 
