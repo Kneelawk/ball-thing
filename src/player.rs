@@ -1,3 +1,4 @@
+use crate::level::{LevelLoadedEvent, LevelRemovedEvent, PlayerSpawnPoint};
 use crate::AppState;
 use bevy::core_pipeline::bloom::{BloomCompositeMode, BloomSettings};
 use bevy::core_pipeline::clear_color::ClearColorConfig;
@@ -13,9 +14,13 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_player)
+        app.add_startup_system(setup_camera)
+            .add_system(add_player.run_if(no_player_exists))
+            .add_system(remove_player.run_if(player_exists))
             .add_systems(
-                (rotate_camera, jump_player, move_player).in_set(OnUpdate(AppState::InGame)),
+                (rotate_camera, jump_player, move_player)
+                    .in_set(OnUpdate(AppState::InGame))
+                    .distributive_run_if(player_exists),
             )
             .add_system(
                 move_camera
@@ -25,53 +30,11 @@ impl Plugin for PlayerPlugin {
     }
 }
 
-pub fn setup_player(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let player_transform = Transform::from_xyz(0.0, 0.5, 0.0);
+pub fn setup_camera(mut commands: Commands) {
     commands
-        .spawn(Player::default())
-        .insert(PbrBundle {
-            mesh: meshes.add(
-                shape::UVSphere {
-                    radius: 0.5,
-                    sectors: 32,
-                    stacks: 32,
-                }
-                .into(),
-            ),
-            material: materials.add(Color::rgb(0.0, 10.0, 12.0).into()),
-            ..default()
-        })
-        .insert(Collider::ball(0.5))
-        .insert(RigidBody::Dynamic)
-        .insert(ExternalForce::default())
-        .insert(Damping {
-            angular_damping: 0.25,
-            linear_damping: 0.25,
-        })
-        .insert(Sleeping::disabled())
-        .insert(TransformBundle::from_transform(player_transform.clone()))
-        .insert(ActiveEvents::CONTACT_FORCE_EVENTS)
-        .with_children(|builder| {
-            builder.spawn(PointLightBundle {
-                point_light: PointLight {
-                    intensity: 500.0,
-                    shadows_enabled: true,
-                    color: Color::rgb(0.0, 0.833, 1.0),
-                    ..default()
-                },
-                ..default()
-            });
-        });
-
-    let player_camera = PlayerCamera::default();
-    commands
-        .spawn(player_camera.clone())
+        .spawn(PlayerCamera::default())
         .insert(Camera3dBundle {
-            transform: calculate_camera_transform(player_transform.translation, &player_camera),
+            transform: Transform::from_xyz(0.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
             camera_3d: Camera3d {
                 clear_color: ClearColorConfig::Custom(Color::BLACK),
                 ..default()
@@ -87,6 +50,82 @@ pub fn setup_player(
             composite_mode: BloomCompositeMode::Additive,
             ..default()
         });
+}
+
+pub fn no_player_exists(player: Query<Entity, With<Player>>) -> bool {
+    player.is_empty()
+}
+
+pub fn player_exists(player: Query<Entity, With<Player>>) -> bool {
+    !no_player_exists(player)
+}
+
+pub fn add_player(
+    mut level_load: EventReader<LevelLoadedEvent>,
+    spawnpoint: Query<&Transform, With<PlayerSpawnPoint>>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if let Some(level) = level_load.iter().next() {
+        let spawnpoint = match spawnpoint.get(level.entities.spawn) {
+            Ok(trans) => trans.translation,
+            Err(_) => Vec3::new(0.0, 0.5, 0.0),
+        };
+
+        let player_transform = Transform::from_translation(spawnpoint);
+        commands
+            .spawn(Player::default())
+            .insert(PbrBundle {
+                mesh: meshes.add(
+                    shape::UVSphere {
+                        radius: 0.5,
+                        sectors: 32,
+                        stacks: 32,
+                    }
+                    .into(),
+                ),
+                material: materials.add(Color::rgb(0.0, 10.0, 12.0).into()),
+                ..default()
+            })
+            .insert(Collider::ball(0.5))
+            .insert(RigidBody::Dynamic)
+            .insert(ExternalForce::default())
+            .insert(Damping {
+                angular_damping: 0.25,
+                linear_damping: 0.25,
+            })
+            .insert(Sleeping::disabled())
+            .insert(TransformBundle::from_transform(player_transform.clone()))
+            .insert(ActiveEvents::CONTACT_FORCE_EVENTS)
+            .with_children(|builder| {
+                builder.spawn(PointLightBundle {
+                    point_light: PointLight {
+                        intensity: 500.0,
+                        shadows_enabled: true,
+                        color: Color::rgb(0.0, 0.833, 1.0),
+                        ..default()
+                    },
+                    ..default()
+                });
+            });
+    }
+
+    level_load.clear();
+}
+
+pub fn remove_player(
+    mut level_remove: EventReader<LevelRemovedEvent>,
+    players: Query<Entity, With<Player>>,
+    mut commands: Commands,
+) {
+    if let Some(_) = level_remove.iter().next() {
+        for player in players.iter() {
+            commands.entity(player).despawn();
+        }
+    }
+
+    level_remove.clear();
 }
 
 pub fn rotate_camera(mut camera: Query<&mut PlayerCamera>, mut mouse: EventReader<MouseMotion>) {

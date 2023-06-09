@@ -1,6 +1,6 @@
 pub mod serial;
 
-use crate::level::serial::{LevelAssetLoader, SerialLevel};
+use crate::level::serial::{LevelAssetLoader, SerialLevel, SpawnArgs};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
@@ -9,10 +9,12 @@ pub struct LevelsPlugin;
 impl Plugin for LevelsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LevelState>()
+            .add_event::<LevelRemovedEvent>()
+            .add_event::<LevelLoadedEvent>()
             .add_asset::<SerialLevel>()
             .init_asset_loader::<LevelAssetLoader>()
             .add_startup_system(setup_level)
-            .add_system(build_level_on_load.in_base_set(CoreSet::PreUpdate));
+            .add_systems((remove_level, build_level_on_load).in_base_set(CoreSet::PreUpdate));
     }
 }
 
@@ -35,16 +37,6 @@ pub fn setup_level(
                     0.0, -0.1, 0.0,
                 )));
         });
-
-    commands
-        .spawn(PbrBundle {
-            mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-            material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
-            transform: Transform::from_xyz(0.0, 0.5, -2.0),
-            ..default()
-        })
-        .insert(Collider::cuboid(0.5, 0.5, 0.5))
-        .insert(RigidBody::Dynamic);
 }
 
 #[derive(Default, Debug, Clone, Resource)]
@@ -55,9 +47,45 @@ pub struct LevelState {
 #[derive(Default, Debug, Copy, Clone, Component)]
 pub struct LevelObject;
 
+#[derive(Default, Debug, Copy, Clone, Component)]
+pub struct PlayerSpawnPoint;
+
+#[derive(Default, Debug, Copy, Clone)]
+pub struct LevelRemovedEvent;
+
+#[derive(Debug, Copy, Clone)]
+pub struct LevelLoadedEvent {
+    pub entities: LevelPertinentEntities,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct LevelPertinentEntities {
+    pub spawn: Entity,
+}
+
+/// Removes all level objects if the level is set to None.
+fn remove_level(
+    mut commands: Commands,
+    level_state: Res<LevelState>,
+    mut level_events: EventWriter<LevelRemovedEvent>,
+    old_objects: Query<Entity, With<LevelObject>>,
+) {
+    if level_state.is_changed() {
+        if level_state.handle.is_none() {
+            for old in old_objects.iter() {
+                commands.entity(old).despawn();
+            }
+
+            level_events.send(LevelRemovedEvent);
+        }
+    }
+}
+
+/// Adds level objects once the given level has loaded, re-adding if reloaded.
 fn build_level_on_load(
     level_state: Res<LevelState>,
     old_objects: Query<Entity, With<LevelObject>>,
+    mut level_events: EventWriter<LevelLoadedEvent>,
     mut asset_events: EventReader<AssetEvent<SerialLevel>>,
     assets: Res<Assets<SerialLevel>>,
     mut commands: Commands,
@@ -79,9 +107,17 @@ fn build_level_on_load(
                         commands.entity(old).despawn();
                     }
 
-                    level.spawn(&mut commands, &mut meshes, &mut materials);
+                    let entities = level.spawn(&mut SpawnArgs {
+                        commands: &mut commands,
+                        meshes: &mut meshes,
+                        materials: &mut materials,
+                    });
+
+                    level_events.send(LevelLoadedEvent { entities });
                 }
             }
         }
     }
+
+    asset_events.clear();
 }

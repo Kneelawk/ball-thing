@@ -1,4 +1,4 @@
-use crate::level::LevelObject;
+use crate::level::{LevelObject, LevelPertinentEntities, PlayerSpawnPoint};
 use bevy::asset::{AssetLoader, BoxedFuture, LoadContext, LoadedAsset};
 use bevy::prelude::*;
 use bevy::reflect::TypeUuid;
@@ -35,33 +35,54 @@ impl AssetLoader for LevelAssetLoader {
     }
 }
 
+pub struct SpawnArgs<'a, 'w, 's, 'r1, 'r2> {
+    pub commands: &'a mut Commands<'w, 's>,
+    pub meshes: &'a mut ResMut<'r1, Assets<Mesh>>,
+    pub materials: &'a mut ResMut<'r2, Assets<StandardMaterial>>,
+}
+
 #[derive(Debug, Clone, knuffel::Decode, TypeUuid)]
 #[uuid = "a7b66c53-c270-49eb-a822-822246b6e56a"]
 pub struct SerialLevel {
+    #[knuffel(child)]
+    spawn: SerialSpawnPoint,
+
     #[knuffel(children(name = "cube"))]
     cubes: Vec<SerialCube>,
 }
 
 impl SerialLevel {
-    pub fn spawn(
-        &self,
-        commands: &mut Commands,
-        meshes: &mut ResMut<Assets<Mesh>>,
-        materials: &mut ResMut<Assets<StandardMaterial>>,
-    ) {
+    pub fn spawn(&self, args: &mut SpawnArgs) -> LevelPertinentEntities {
         for cube in self.cubes.iter() {
-            cube.spawn(commands, meshes, materials);
+            cube.spawn(args);
         }
+
+        let spawn = self.spawn.spawn(args);
+
+        LevelPertinentEntities { spawn }
     }
 }
 
 pub trait SerialObject {
-    fn spawn(
-        &self,
-        commands: &mut Commands,
-        meshes: &mut ResMut<Assets<Mesh>>,
-        materials: &mut ResMut<Assets<StandardMaterial>>,
-    );
+    fn spawn(&self, args: &mut SpawnArgs) -> Entity;
+}
+
+#[derive(Debug, Clone, knuffel::Decode)]
+pub struct SerialSpawnPoint {
+    #[knuffel(child)]
+    pos: SerialVec,
+}
+
+impl SerialObject for SerialSpawnPoint {
+    fn spawn(&self, args: &mut SpawnArgs) -> Entity {
+        args.commands
+            .spawn(PlayerSpawnPoint)
+            .insert(LevelObject)
+            .insert(TransformBundle::from_transform(
+                Transform::from_translation(self.pos.into()),
+            ))
+            .id()
+    }
 }
 
 #[derive(Debug, Clone, knuffel::Decode)]
@@ -77,21 +98,16 @@ pub struct SerialCube {
 }
 
 impl SerialObject for SerialCube {
-    fn spawn(
-        &self,
-        commands: &mut Commands,
-        meshes: &mut ResMut<Assets<Mesh>>,
-        materials: &mut ResMut<Assets<StandardMaterial>>,
-    ) {
+    fn spawn(&self, args: &mut SpawnArgs) -> Entity {
         let mut rotation = Quat::default();
         for rot in self.rotations.iter() {
             rotation = rotation.mul_quat((*rot).into());
         }
 
-        commands
+        args.commands
             .spawn(PbrBundle {
-                mesh: meshes.add(Mesh::from(shape::Cube { size: self.size })),
-                material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
+                mesh: args.meshes.add(Mesh::from(shape::Cube { size: self.size })),
+                material: args.materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
                 transform: Transform::from_translation(self.pos.into()).with_rotation(rotation),
                 ..default()
             })
@@ -101,7 +117,8 @@ impl SerialObject for SerialCube {
                 self.size / 2.0,
                 self.size / 2.0,
             ))
-            .insert(RigidBody::Dynamic);
+            .insert(RigidBody::Dynamic)
+            .id()
     }
 }
 
