@@ -2,7 +2,6 @@ pub mod serial;
 
 use crate::level::serial::{LevelAssetLoader, SerialLevel, SpawnArgs};
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::*;
 
 pub struct LevelsPlugin;
 
@@ -13,30 +12,8 @@ impl Plugin for LevelsPlugin {
             .add_event::<LevelLoadedEvent>()
             .add_asset::<SerialLevel>()
             .init_asset_loader::<LevelAssetLoader>()
-            .add_startup_system(setup_level)
             .add_systems((remove_level, build_level_on_load).in_base_set(CoreSet::PreUpdate));
     }
-}
-
-pub fn setup_level(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    commands
-        .spawn(PbrBundle {
-            mesh: meshes.add(shape::Plane::from_size(500.0).into()),
-            material: materials.add(Color::rgb(0.3, 0.3, 0.3).into()),
-            ..default()
-        })
-        .with_children(|builder| {
-            builder
-                .spawn(Collider::cuboid(250.0, 0.1, 250.0))
-                .insert(RigidBody::Fixed)
-                .insert(TransformBundle::from_transform(Transform::from_xyz(
-                    0.0, -0.1, 0.0,
-                )));
-        });
 }
 
 #[derive(Default, Debug, Clone, Resource)]
@@ -73,7 +50,7 @@ fn remove_level(
     if level_state.is_changed() {
         if level_state.handle.is_none() {
             for old in old_objects.iter() {
-                commands.entity(old).despawn();
+                commands.entity(old).despawn_recursive();
             }
 
             level_events.send(LevelRemovedEvent);
@@ -104,7 +81,7 @@ fn build_level_on_load(
                 if let Some(level) = assets.get(level_handle) {
                     // remove old objects if they're still around
                     for old in old_objects.iter() {
-                        commands.entity(old).despawn();
+                        commands.entity(old).despawn_recursive();
                     }
 
                     let entities = level.spawn(&mut SpawnArgs {

@@ -49,12 +49,19 @@ pub struct SerialLevel {
 
     #[knuffel(children(name = "cube"))]
     cubes: Vec<SerialCube>,
+
+    #[knuffel(children(name = "plane"))]
+    planes: Vec<SerialPlane>,
 }
 
 impl SerialLevel {
     pub fn spawn(&self, args: &mut SpawnArgs) -> LevelPertinentEntities {
         for cube in self.cubes.iter() {
             cube.spawn(args);
+        }
+
+        for plane in self.planes.iter() {
+            plane.spawn(args);
         }
 
         let spawn = self.spawn.spawn(args);
@@ -118,6 +125,37 @@ impl SerialObject for SerialCube {
                 self.size / 2.0,
             ))
             .insert(RigidBody::Dynamic)
+            .id()
+    }
+}
+
+#[derive(Debug, Clone, knuffel::Decode)]
+pub struct SerialPlane {
+    #[knuffel(child)]
+    pos: SerialVec,
+
+    #[knuffel(argument)]
+    size: f32,
+}
+
+impl SerialObject for SerialPlane {
+    fn spawn(&self, args: &mut SpawnArgs) -> Entity {
+        args.commands
+            .spawn(PbrBundle {
+                mesh: args.meshes.add(shape::Plane::from_size(self.size).into()),
+                material: args.materials.add(Color::rgb(0.3, 0.3, 0.3).into()),
+                transform: Transform::from_translation(self.pos.into()),
+                ..default()
+            })
+            .insert(LevelObject)
+            .with_children(|builder| {
+                builder
+                    .spawn(Collider::cuboid(self.size / 2.0, 0.1, self.size / 2.0))
+                    .insert(RigidBody::Fixed)
+                    .insert(TransformBundle::from_transform(Transform::from_xyz(
+                        0.0, -0.1, 0.0,
+                    )));
+            })
             .id()
     }
 }
