@@ -91,13 +91,14 @@ pub fn add_player(
             .insert(Collider::ball(0.5))
             .insert(RigidBody::Dynamic)
             .insert(ExternalForce::default())
+            .insert(Velocity::default())
             .insert(Damping {
                 angular_damping: 0.25,
                 linear_damping: 0.25,
             })
             .insert(Sleeping::disabled())
             .insert(TransformBundle::from_transform(player_transform.clone()))
-            .insert(ActiveEvents::CONTACT_FORCE_EVENTS)
+            .insert(ActiveEvents::CONTACT_FORCE_EVENTS | ActiveEvents::COLLISION_EVENTS)
             .with_children(|builder| {
                 builder.spawn(PointLightBundle {
                     point_light: PointLight {

@@ -1,3 +1,4 @@
+pub mod logic;
 pub mod serial;
 
 use crate::level::serial::{LevelAssetLoader, SerialLevel, SpawnArgs};
@@ -13,6 +14,7 @@ impl Plugin for LevelsPlugin {
             .add_asset::<SerialLevel>()
             .init_asset_loader::<LevelAssetLoader>()
             .add_systems((remove_level, build_level_on_load).in_base_set(CoreSet::PreUpdate));
+        logic::setup(app);
     }
 }
 
@@ -91,6 +93,8 @@ fn build_level_on_load(
                     });
 
                     level_events.send(LevelLoadedEvent { entities });
+
+                    info!("Level Loaded.");
                 }
             }
         }

@@ -1,3 +1,4 @@
+use crate::level::logic::DeathObject;
 use crate::level::{LevelObject, LevelPertinentEntities, PlayerSpawnPoint};
 use bevy::asset::{AssetLoader, BoxedFuture, LoadContext, LoadedAsset};
 use bevy::prelude::*;
@@ -52,6 +53,9 @@ pub struct SerialLevel {
 
     #[knuffel(children(name = "plane"))]
     planes: Vec<SerialPlane>,
+
+    #[knuffel(children(name = "death_plane"))]
+    death_planes: Vec<SerialDeathPlane>,
 }
 
 impl SerialLevel {
@@ -62,6 +66,10 @@ impl SerialLevel {
 
         for plane in self.planes.iter() {
             plane.spawn(args);
+        }
+
+        for death_plane in self.death_planes.iter() {
+            death_plane.spawn(args);
         }
 
         let spawn = self.spawn.spawn(args);
@@ -88,6 +96,36 @@ impl SerialObject for SerialSpawnPoint {
             .insert(TransformBundle::from_transform(
                 Transform::from_translation(self.pos.into()),
             ))
+            .id()
+    }
+}
+
+#[derive(Debug, Clone, knuffel::Decode)]
+pub struct SerialDeathPlane {
+    #[knuffel(child)]
+    pos: SerialVec,
+
+    #[knuffel(argument)]
+    size: f32,
+}
+
+impl SerialObject for SerialDeathPlane {
+    fn spawn(&self, args: &mut SpawnArgs) -> Entity {
+        args.commands
+            .spawn(DeathObject)
+            .insert(LevelObject)
+            .insert(TransformBundle::from_transform(
+                Transform::from_translation(
+                    Into::<Vec3>::into(self.pos) - Vec3::new(0.0, self.size / 2.0, 0.0),
+                ),
+            ))
+            .insert(Collider::cuboid(
+                self.size / 2.0,
+                self.size / 2.0,
+                self.size / 2.0,
+            ))
+            .insert(Sensor)
+            .insert(RigidBody::Fixed)
             .id()
     }
 }
