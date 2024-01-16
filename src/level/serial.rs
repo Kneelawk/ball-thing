@@ -1,6 +1,7 @@
 use crate::level::logic::DeathObject;
 use crate::level::{LevelObject, LevelPertinentEntities, PlayerSpawnPoint};
-use bevy::asset::{AssetLoader, BoxedFuture, LoadContext, LoadedAsset};
+use bevy::asset::io::Reader;
+use bevy::asset::{AssetLoader, AsyncReadExt, BoxedFuture, LoadContext};
 use bevy::prelude::*;
 use bevy::reflect::TypeUuid;
 use bevy_rapier3d::prelude::*;
@@ -10,24 +11,29 @@ use std::f32::consts::PI;
 pub struct LevelAssetLoader;
 
 impl AssetLoader for LevelAssetLoader {
+    type Asset = SerialLevel;
+    type Settings = ();
+    type Error = anyhow::Error;
+
     fn load<'a>(
         &'a self,
-        bytes: &'a [u8],
+        reader: &'a mut Reader,
+        _settings: &'a Self::Settings,
         load_context: &'a mut LoadContext,
-    ) -> BoxedFuture<'a, Result<(), bevy::asset::Error>> {
+    ) -> BoxedFuture<'a, Result<Self::Asset, Self::Error>> {
         Box::pin(async move {
-            let level: SerialLevel = match knuffel::parse(
-                &load_context.path().to_string_lossy(),
-                &String::from_utf8_lossy(bytes),
-            ) {
-                Ok(res) => res,
-                Err(err) => {
-                    error!("{:?}", miette::Report::new(err));
-                    anyhow::bail!("Error loading level")
-                }
-            };
-            load_context.set_default_asset(LoadedAsset::new(level));
-            Ok(())
+            let mut str = String::new();
+            reader.read_to_string(&mut str).await?;
+            let level: SerialLevel =
+                match knuffel::parse(&load_context.path().to_string_lossy(), &str) {
+                    Ok(res) => res,
+                    Err(err) => {
+                        error!("{:?}", miette::Report::new(err));
+                        anyhow::bail!("Error loading level")
+                    }
+                };
+
+            Ok(level)
         })
     }
 
@@ -42,7 +48,7 @@ pub struct SpawnArgs<'a, 'w, 's, 'r1, 'r2> {
     pub materials: &'a mut ResMut<'r2, Assets<StandardMaterial>>,
 }
 
-#[derive(Debug, Clone, knuffel::Decode, TypeUuid)]
+#[derive(Debug, Clone, knuffel::Decode, TypeUuid, Asset, TypePath)]
 #[uuid = "a7b66c53-c270-49eb-a822-822246b6e56a"]
 pub struct SerialLevel {
     #[knuffel(child)]
@@ -85,7 +91,7 @@ pub trait SerialObject {
 #[derive(Debug, Clone, knuffel::Decode)]
 pub struct SerialSpawnPoint {
     #[knuffel(child)]
-    pos: SerialVec,
+    pos: SerialVec3,
 }
 
 impl SerialObject for SerialSpawnPoint {
@@ -103,7 +109,7 @@ impl SerialObject for SerialSpawnPoint {
 #[derive(Debug, Clone, knuffel::Decode)]
 pub struct SerialDeathPlane {
     #[knuffel(child)]
-    pos: SerialVec,
+    pos: SerialVec3,
 
     #[knuffel(argument)]
     size: f32,
@@ -133,7 +139,7 @@ impl SerialObject for SerialDeathPlane {
 #[derive(Debug, Clone, knuffel::Decode)]
 pub struct SerialCube {
     #[knuffel(child)]
-    pos: SerialVec,
+    pos: SerialVec3,
 
     #[knuffel(children(name = "rot"))]
     rotations: Vec<SerialRotation>,
@@ -170,25 +176,38 @@ impl SerialObject for SerialCube {
 #[derive(Debug, Clone, knuffel::Decode)]
 pub struct SerialPlane {
     #[knuffel(child)]
-    pos: SerialVec,
+    pos: SerialVec3,
 
     #[knuffel(argument)]
     size: f32,
+
+    #[knuffel(argument)]
+    size2: Option<f32>,
 }
 
 impl SerialObject for SerialPlane {
     fn spawn(&self, args: &mut SpawnArgs) -> Entity {
+        let size = if let Some(size2) = self.size2 {
+            Vec2::new(self.size, size2)
+        } else {
+            Vec2::new(self.size, self.size)
+        };
+
         args.commands
-            .spawn(PbrBundle {
-                mesh: args.meshes.add(shape::Plane::from_size(self.size).into()),
-                material: args.materials.add(Color::rgb(0.3, 0.3, 0.3).into()),
+            .spawn(LevelObject)
+            .insert(SpatialBundle {
                 transform: Transform::from_translation(self.pos.into()),
-                ..default()
+                ..Default::default()
             })
-            .insert(LevelObject)
             .with_children(|builder| {
+                builder.spawn(PbrBundle {
+                    mesh: args.meshes.add(shape::Quad::new(size).into()),
+                    material: args.materials.add(Color::rgb(0.3, 0.3, 0.3).into()),
+                    transform: Transform::from_rotation(Quat::from_rotation_x(-PI / 2.0)),
+                    ..default()
+                });
                 builder
-                    .spawn(Collider::cuboid(self.size / 2.0, 0.1, self.size / 2.0))
+                    .spawn(Collider::cuboid(size.x / 2.0, 0.1, size.y / 2.0))
                     .insert(RigidBody::Fixed)
                     .insert(TransformBundle::from_transform(Transform::from_xyz(
                         0.0, -0.1, 0.0,
@@ -227,7 +246,7 @@ impl From<SerialRotation> for Quat {
 }
 
 #[derive(Debug, Copy, Clone, knuffel::Decode)]
-pub struct SerialVec {
+pub struct SerialVec3 {
     #[knuffel(argument)]
     x: f32,
     #[knuffel(argument)]
@@ -236,8 +255,8 @@ pub struct SerialVec {
     z: f32,
 }
 
-impl From<SerialVec> for Vec3 {
-    fn from(value: SerialVec) -> Self {
+impl From<SerialVec3> for Vec3 {
+    fn from(value: SerialVec3) -> Self {
         Vec3::new(value.x, value.y, value.z)
     }
 }

@@ -11,9 +11,9 @@ impl Plugin for LevelsPlugin {
         app.init_resource::<LevelState>()
             .add_event::<LevelRemovedEvent>()
             .add_event::<LevelLoadedEvent>()
-            .add_asset::<SerialLevel>()
+            .init_asset::<SerialLevel>()
             .init_asset_loader::<LevelAssetLoader>()
-            .add_systems((remove_level, build_level_on_load).in_base_set(CoreSet::PreUpdate));
+            .add_systems(PreUpdate, (remove_level, build_level_on_load));
         logic::setup(app);
     }
 }
@@ -29,10 +29,10 @@ pub struct LevelObject;
 #[derive(Default, Debug, Copy, Clone, Component)]
 pub struct PlayerSpawnPoint;
 
-#[derive(Default, Debug, Copy, Clone)]
+#[derive(Default, Debug, Copy, Clone, Event)]
 pub struct LevelRemovedEvent;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Event)]
 pub struct LevelLoadedEvent {
     pub entities: LevelPertinentEntities,
 }
@@ -72,14 +72,15 @@ fn build_level_on_load(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if let Some(level_handle) = &level_state.handle {
-        for event in asset_events.iter() {
-            let (handle, update) = match event {
-                AssetEvent::Created { handle } => (handle, true),
-                AssetEvent::Modified { handle } => (handle, true),
-                AssetEvent::Removed { handle } => (handle, false),
+        for event in asset_events.read() {
+            let (&handle, update) = match event {
+                AssetEvent::Added { id } => (id, true),
+                AssetEvent::Modified { id } => (id, true),
+                AssetEvent::Removed { id } => (id, false),
+                AssetEvent::LoadedWithDependencies { id } => (id, true),
             };
 
-            if handle == level_handle && update {
+            if handle == level_handle.id() && update {
                 if let Some(level) = assets.get(level_handle) {
                     // remove old objects if they're still around
                     for old in old_objects.iter() {

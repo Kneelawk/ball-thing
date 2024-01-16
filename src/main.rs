@@ -12,17 +12,14 @@ use bevy_rapier3d::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(AssetPlugin {
-            watch_for_changes: true,
-            ..default()
-        }))
-        .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugins(DefaultPlugins)
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_state::<AppState>()
-        .add_plugin(LevelsPlugin)
-        .add_plugin(PlayerPlugin)
-        .add_plugin(MenuPlugin)
-        .add_startup_system(setup_physics)
-        .add_systems((pause_game, state_respond, set_in_game))
+        .add_plugins(LevelsPlugin)
+        .add_plugins(PlayerPlugin)
+        .add_plugins(MenuPlugin)
+        .add_systems(Startup, setup_physics)
+        .add_systems(Update, (pause_game, state_respond, set_in_game))
         .run();
 }
 
@@ -47,7 +44,7 @@ fn state_respond(
     let mut window = windows.single_mut();
 
     if cur_state.is_changed() {
-        if cur_state.0 == AppState::InGame {
+        if *cur_state.get() == AppState::InGame {
             window.cursor.visible = false;
             window.cursor.grab_mode = CursorGrabMode::Locked;
             physics.physics_pipeline_active = true;
@@ -65,9 +62,9 @@ fn pause_game(
     key: Res<Input<KeyCode>>,
 ) {
     if key.just_pressed(KeyCode::Escape) {
-        if cur_state.0 == AppState::InGame {
+        if *cur_state.get() == AppState::InGame {
             next_state.set(AppState::PauseMenu);
-        } else if cur_state.0 == AppState::PauseMenu {
+        } else if *cur_state.get() == AppState::PauseMenu {
             next_state.set(AppState::InGame);
         }
     }
@@ -78,8 +75,8 @@ fn set_in_game(
     mut next_state: ResMut<NextState<AppState>>,
     mut level_load: EventReader<LevelLoadedEvent>,
 ) {
-    if cur_state.0 == AppState::Loading {
-        if let Some(_) = level_load.iter().next() {
+    if *cur_state.get() == AppState::Loading {
+        if let Some(_) = level_load.read().next() {
             next_state.set(AppState::InGame);
         }
     }

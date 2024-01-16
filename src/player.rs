@@ -14,17 +14,19 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(setup_camera)
-            .add_system(add_player.run_if(no_player_exists))
-            .add_system(remove_player.run_if(player_exists))
+        app.add_systems(Startup, setup_camera)
+            .add_systems(Update, add_player.run_if(no_player_exists))
+            .add_systems(Update, remove_player.run_if(player_exists))
             .add_systems(
+                Update,
                 (rotate_camera, jump_player, move_player)
-                    .in_set(OnUpdate(AppState::InGame))
-                    .distributive_run_if(player_exists),
+                    .distributive_run_if(player_exists)
+                    .distributive_run_if(in_state(AppState::InGame)),
             )
-            .add_system(
+            .add_systems(
+                PostUpdate,
                 move_camera
-                    .in_base_set(CoreSet::PostUpdate)
+                    .run_if(player_exists)
                     .run_if(in_state(AppState::InGame)),
             );
     }
@@ -67,7 +69,7 @@ pub fn add_player(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if let Some(level) = level_load.iter().next() {
+    if let Some(level) = level_load.read().next() {
         let spawnpoint = match spawnpoint.get(level.entities.spawn) {
             Ok(trans) => trans.translation,
             Err(_) => Vec3::new(0.0, 0.5, 0.0),
@@ -120,7 +122,7 @@ pub fn remove_player(
     players: Query<Entity, With<Player>>,
     mut commands: Commands,
 ) {
-    if let Some(_) = level_remove.iter().next() {
+    if let Some(_) = level_remove.read().next() {
         for player in players.iter() {
             commands.entity(player).despawn_recursive();
         }
@@ -132,7 +134,7 @@ pub fn remove_player(
 pub fn rotate_camera(mut camera: Query<&mut PlayerCamera>, mut mouse: EventReader<MouseMotion>) {
     let mut camera = camera.single_mut();
 
-    for mouse in mouse.iter() {
+    for mouse in mouse.read() {
         camera.yaw += -mouse.delta.x * MOUSE_SPEED;
         camera.pitch =
             (camera.pitch - mouse.delta.y * MOUSE_SPEED).clamp(-PI / 2.0 + 0.001, PI / 2.0 - 0.001);
@@ -174,7 +176,7 @@ pub fn jump_player(
     let (player_entity, mut player_force) = player.single_mut();
 
     let mut jumping = false;
-    for event in events.iter() {
+    for event in events.read() {
         if (player_entity == event.collider1 || player_entity == event.collider2)
             && Vec3::dot(event.max_force_direction, Vec3::Y) > 0.8
         {
@@ -214,7 +216,7 @@ pub struct PlayerCamera {
 impl Default for PlayerCamera {
     fn default() -> Self {
         PlayerCamera {
-            pitch: -PI / 4.0,
+            pitch: PI / 4.0,
             yaw: 0.0,
             distance: 5.0,
         }

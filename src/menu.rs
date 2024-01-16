@@ -10,10 +10,10 @@ const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 
 impl Plugin for MenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems((manage_main_menu, manage_pause_menu))
-            .add_system(button_background)
-            .add_system(start_listener)
-            .add_systems((resume_listener, main_menu_listener));
+        app.add_systems(Update, (manage_main_menu, manage_pause_menu))
+            .add_systems(Update, button_background)
+            .add_systems(Update, start_listener)
+            .add_systems(Update, (resume_listener, main_menu_listener));
     }
 }
 
@@ -39,12 +39,13 @@ fn manage_main_menu(
     assets: Res<AssetServer>,
 ) {
     if app_state.is_changed() {
-        if app_state.0 == AppState::MainMenu {
+        if *app_state.get() == AppState::MainMenu {
             if main_menu_query.is_empty() {
                 commands
                     .spawn(NodeBundle {
                         style: Style {
-                            size: Size::width(Val::Percent(100.0)),
+                            width: Val::Percent(100.0),
+                            height: Val::Percent(100.0),
                             align_items: AlignItems::Center,
                             justify_content: JustifyContent::Center,
                             ..default()
@@ -55,7 +56,7 @@ fn manage_main_menu(
                     .with_children(|parent| {
                         spawn_button(
                             parent,
-                            Size::new(Val::Px(150.0), Val::Px(65.0)),
+                            Val::Px(150.0), Val::Px(65.0),
                             "Load",
                             &assets,
                         )
@@ -77,13 +78,14 @@ fn manage_pause_menu(
     assets: Res<AssetServer>,
 ) {
     if app_state.is_changed() {
-        if app_state.0 == AppState::PauseMenu {
+        if *app_state.get() == AppState::PauseMenu {
             if pause_menu_query.is_empty() {
                 commands
                     .spawn(NodeBundle {
                         style: Style {
                             flex_direction: FlexDirection::Column,
-                            size: Size::width(Val::Percent(100.0)),
+                            width: Val::Percent(100.0),
+                            height: Val::Percent(100.0),
                             align_items: AlignItems::Center,
                             justify_content: JustifyContent::Center,
                             ..default()
@@ -94,14 +96,14 @@ fn manage_pause_menu(
                     .with_children(|parent| {
                         spawn_button(
                             parent,
-                            Size::new(Val::Px(200.0), Val::Px(65.0)),
+                            Val::Px(200.0), Val::Px(65.0),
                             "Resume",
                             &assets,
                         )
                         .insert(ResumeGameButton);
                         spawn_button(
                             parent,
-                            Size::new(Val::Px(200.0), Val::Px(65.0)),
+                            Val::Px(200.0), Val::Px(65.0),
                             "Main Menu",
                             &assets,
                         )
@@ -118,14 +120,16 @@ fn manage_pause_menu(
 
 fn spawn_button<'a, 'w, 's>(
     parent: &'a mut ChildBuilder<'w, 's, '_>,
-    size: Size,
+    width: Val,
+    height: Val,
     text: impl Into<String>,
     assets: &Res<AssetServer>,
 ) -> EntityCommands<'w, 's, 'a> {
     let mut commands = parent.spawn(ButtonBundle {
         background_color: NORMAL_BUTTON.into(),
         style: Style {
-            size,
+            width,
+            height,
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
@@ -151,13 +155,13 @@ fn button_background(
 ) {
     for (interaction, mut color) in buttons.iter_mut() {
         match interaction {
-            Interaction::Clicked => {}
             Interaction::Hovered => {
                 *color = HOVERED_BUTTON.into();
             }
             Interaction::None => {
                 *color = NORMAL_BUTTON.into();
             }
+            Interaction::Pressed => {}
         }
     }
 }
@@ -169,7 +173,7 @@ fn start_listener(
     assets: Res<AssetServer>,
 ) {
     for &interaction in start_game.iter() {
-        if interaction == Interaction::Clicked {
+        if interaction == Interaction::Pressed {
             app_state.set(AppState::Loading);
             level_state.handle = Some(assets.load("levels/level0.level.kdl"));
             return;
@@ -182,7 +186,7 @@ fn resume_listener(
     mut app_state: ResMut<NextState<AppState>>,
 ) {
     for &interaction in resume_game.iter() {
-        if interaction == Interaction::Clicked {
+        if interaction == Interaction::Pressed {
             app_state.set(AppState::InGame);
             return;
         }
@@ -195,7 +199,7 @@ fn main_menu_listener(
     mut app_state: ResMut<NextState<AppState>>,
 ) {
     for &interaction in main_menu.iter() {
-        if interaction == Interaction::Clicked {
+        if interaction == Interaction::Pressed {
             app_state.set(AppState::MainMenu);
             level_state.handle = None;
             return;

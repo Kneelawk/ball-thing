@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.71"
-bevy = "0.10.1"
+bevy = { version = "0.12.1" , features = ["file_watcher"] }
 #bevy_editor_pls = "0.4.0"
-bevy_rapier3d = "0.21.0"
+bevy_rapier3d = "0.23.0"
 knuffel = "3.2.0"
 miette = { version = "5.9.0", features = ["fancy"] }
 serde = { version = "1.0.163", features = ["derive"] }
