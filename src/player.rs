@@ -169,8 +169,8 @@ pub fn rotate_camera(mut camera: Query<&mut PlayerCamera>, mut mouse: EventReade
     if let Some(mut camera) = camera.iter_mut().next() {
         for mouse in mouse.read() {
             camera.yaw += -mouse.delta.x * MOUSE_SPEED;
-            camera.pitch =
-                (camera.pitch - mouse.delta.y * MOUSE_SPEED).clamp(-PI / 2.0 + 0.001, PI / 2.0 - 0.001);
+            camera.pitch = (camera.pitch - mouse.delta.y * MOUSE_SPEED)
+                .clamp(-PI / 2.0 + 0.001, PI / 2.0 - 0.001);
         }
     } else {
         mouse.clear();
@@ -212,14 +212,16 @@ pub fn jump_player(
     let (player_entity, mut player_impulse) = player.single_mut();
 
     let mut jumping = false;
-    for event in events.read() {
-        if (player_entity == event.collider1 || player_entity == event.collider2)
-            && Vec3::dot(event.max_force_direction, Vec3::Y) > 0.8
-        {
-            if key.pressed(KeyCode::Space) {
-                jumping = true;
+    if key.pressed(KeyCode::Space) {
+        for event in events.read() {
+            if player_entity == event.collider1 || player_entity == event.collider2 {
+                if Vec3::dot(event.max_force_direction, Vec3::Y).abs() > 0.8 {
+                    jumping = true;
+                }
             }
         }
+    } else {
+        events.clear();
     }
 
     if jumping {
