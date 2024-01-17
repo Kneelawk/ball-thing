@@ -121,6 +121,7 @@ pub fn add_player(
                 .insert(Collider::ball(0.5))
                 .insert(RigidBody::Dynamic)
                 .insert(ExternalForce::default())
+                .insert(ExternalImpulse::default())
                 .insert(Velocity::default())
                 .insert(Damping {
                     angular_damping: 0.25,
@@ -204,11 +205,11 @@ pub fn move_player(
 }
 
 pub fn jump_player(
-    mut player: Query<(Entity, &mut ExternalForce), With<Player>>,
+    mut player: Query<(Entity, &mut ExternalImpulse), With<Player>>,
     mut events: EventReader<ContactForceEvent>,
     key: Res<Input<KeyCode>>,
 ) {
-    let (player_entity, mut player_force) = player.single_mut();
+    let (player_entity, mut player_impulse) = player.single_mut();
 
     let mut jumping = false;
     for event in events.read() {
@@ -222,9 +223,9 @@ pub fn jump_player(
     }
 
     if jumping {
-        player_force.force = Vec3::new(0.0, 150.0, 0.0);
+        player_impulse.impulse = Vec3::new(0.0, 2.5, 0.0);
     } else {
-        player_force.force = Vec3::ZERO;
+        player_impulse.impulse = Vec3::ZERO;
     }
 }
 
