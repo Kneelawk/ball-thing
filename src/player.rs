@@ -15,11 +15,11 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_camera)
-            .add_systems(Update, add_player.run_if(no_player_exists))
-            .add_systems(Update, remove_player.run_if(player_exists))
+            .add_systems(Update, (add_player, remove_player))
+            .add_systems(Update, rotate_camera)
             .add_systems(
                 Update,
-                (rotate_camera, jump_player, move_player)
+                (jump_player, move_player)
                     .distributive_run_if(player_exists)
                     .distributive_run_if(in_state(AppState::InGame)),
             )
@@ -29,6 +29,32 @@ impl Plugin for PlayerPlugin {
                     .run_if(player_exists)
                     .run_if(in_state(AppState::InGame)),
             );
+    }
+}
+
+#[derive(Default, Debug, Copy, Clone, Component)]
+pub struct Player;
+
+#[derive(Debug, Clone, Component)]
+pub struct PlayerCamera {
+    pitch: f32,
+    yaw: f32,
+    distance: f32,
+}
+
+impl Default for PlayerCamera {
+    fn default() -> Self {
+        PlayerCamera {
+            pitch: PI / 4.0,
+            yaw: 0.0,
+            distance: 5.0,
+        }
+    }
+}
+
+impl PlayerCamera {
+    pub fn get_looking(&self) -> Vec3 {
+        -Vec3::new(self.yaw.sin(), 0.0, self.yaw.cos())
     }
 }
 
@@ -63,55 +89,60 @@ pub fn player_exists(player: Query<(), With<Player>>) -> bool {
 }
 
 pub fn add_player(
+    player: Query<(), With<Player>>,
     mut level_load: EventReader<LevelLoadedEvent>,
     spawnpoint: Query<&Transform, With<PlayerSpawnPoint>>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if let Some(level) = level_load.read().next() {
-        let spawnpoint = match spawnpoint.get(level.entities.spawn) {
-            Ok(trans) => trans.translation,
-            Err(_) => Vec3::new(0.0, 0.5, 0.0),
-        };
+    if player.is_empty() {
+        if let Some(level) = level_load.read().next() {
+            let spawnpoint = match spawnpoint.get(level.entities.spawn) {
+                Ok(trans) => trans.translation,
+                Err(_) => Vec3::new(0.0, 0.5, 0.0),
+            };
 
-        let player_transform = Transform::from_translation(spawnpoint);
-        commands
-            .spawn(Player::default())
-            .insert(PbrBundle {
-                mesh: meshes.add(
-                    shape::UVSphere {
-                        radius: 0.5,
-                        sectors: 32,
-                        stacks: 32,
-                    }
-                    .into(),
-                ),
-                material: materials.add(Color::rgb(0.0, 10.0, 12.0).into()),
-                ..default()
-            })
-            .insert(Collider::ball(0.5))
-            .insert(RigidBody::Dynamic)
-            .insert(ExternalForce::default())
-            .insert(Velocity::default())
-            .insert(Damping {
-                angular_damping: 0.25,
-                linear_damping: 0.25,
-            })
-            .insert(Sleeping::disabled())
-            .insert(TransformBundle::from_transform(player_transform.clone()))
-            .insert(ActiveEvents::CONTACT_FORCE_EVENTS | ActiveEvents::COLLISION_EVENTS)
-            .with_children(|builder| {
-                builder.spawn(PointLightBundle {
-                    point_light: PointLight {
-                        intensity: 500.0,
-                        shadows_enabled: true,
-                        color: Color::rgb(0.0, 0.833, 1.0),
-                        ..default()
-                    },
+            let player_transform = Transform::from_translation(spawnpoint);
+            commands
+                .spawn(Player::default())
+                .insert(PbrBundle {
+                    mesh: meshes.add(
+                        shape::UVSphere {
+                            radius: 0.5,
+                            sectors: 32,
+                            stacks: 32,
+                        }
+                        .into(),
+                    ),
+                    material: materials.add(Color::rgb(0.0, 10.0, 12.0).into()),
                     ..default()
+                })
+                .insert(Collider::ball(0.5))
+                .insert(RigidBody::Dynamic)
+                .insert(ExternalForce::default())
+                .insert(Velocity::default())
+                .insert(Damping {
+                    angular_damping: 0.25,
+                    linear_damping: 0.25,
+                })
+                .insert(Sleeping::disabled())
+                .insert(TransformBundle::from_transform(player_transform.clone()))
+                .insert(ActiveEvents::CONTACT_FORCE_EVENTS | ActiveEvents::COLLISION_EVENTS)
+                .with_children(|builder| {
+                    builder.spawn(PointLightBundle {
+                        point_light: PointLight {
+                            intensity: 500.0,
+                            shadows_enabled: true,
+                            color: Color::rgb(0.0, 0.833, 1.0),
+                            ..default()
+                        },
+                        ..default()
+                    });
                 });
-            });
+
+            info!("Player spawned.");
+        }
     }
 
     level_load.clear();
@@ -125,6 +156,8 @@ pub fn remove_player(
     if let Some(_) = level_remove.read().next() {
         for player in players.iter() {
             commands.entity(player).despawn_recursive();
+
+            info!("Player removed.");
         }
     }
 
@@ -132,12 +165,14 @@ pub fn remove_player(
 }
 
 pub fn rotate_camera(mut camera: Query<&mut PlayerCamera>, mut mouse: EventReader<MouseMotion>) {
-    let mut camera = camera.single_mut();
-
-    for mouse in mouse.read() {
-        camera.yaw += -mouse.delta.x * MOUSE_SPEED;
-        camera.pitch =
-            (camera.pitch - mouse.delta.y * MOUSE_SPEED).clamp(-PI / 2.0 + 0.001, PI / 2.0 - 0.001);
+    if let Some(mut camera) = camera.iter_mut().next() {
+        for mouse in mouse.read() {
+            camera.yaw += -mouse.delta.x * MOUSE_SPEED;
+            camera.pitch =
+                (camera.pitch - mouse.delta.y * MOUSE_SPEED).clamp(-PI / 2.0 + 0.001, PI / 2.0 - 0.001);
+        }
+    } else {
+        mouse.clear();
     }
 }
 
@@ -201,32 +236,6 @@ pub fn move_camera(
     let player = player.single();
 
     *transform = calculate_camera_transform(player.translation, player_camera);
-}
-
-#[derive(Default, Debug, Copy, Clone, Component)]
-pub struct Player;
-
-#[derive(Debug, Clone, Component)]
-pub struct PlayerCamera {
-    pitch: f32,
-    yaw: f32,
-    distance: f32,
-}
-
-impl Default for PlayerCamera {
-    fn default() -> Self {
-        PlayerCamera {
-            pitch: PI / 4.0,
-            yaw: 0.0,
-            distance: 5.0,
-        }
-    }
-}
-
-impl PlayerCamera {
-    pub fn get_looking(&self) -> Vec3 {
-        -Vec3::new(self.yaw.sin(), 0.0, self.yaw.cos())
-    }
 }
 
 fn calculate_camera_transform(player_pos: Vec3, player_camera: &PlayerCamera) -> Transform {
