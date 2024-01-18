@@ -16,12 +16,12 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_camera)
             .add_systems(Update, (add_player, remove_player))
-            .add_systems(Update, rotate_camera)
+            .add_systems(Update, (rotate_camera, jump_player))
             .add_systems(
                 Update,
-                (jump_player, move_player)
-                    .distributive_run_if(player_exists)
-                    .distributive_run_if(in_state(AppState::InGame)),
+                move_player
+                    .run_if(player_exists)
+                    .run_if(in_state(AppState::InGame)),
             )
             .add_systems(
                 PostUpdate,
@@ -209,25 +209,33 @@ pub fn jump_player(
     mut events: EventReader<ContactForceEvent>,
     key: Res<Input<KeyCode>>,
 ) {
-    let (player_entity, mut player_impulse) = player.single_mut();
-
-    let mut jumping = false;
-    if key.pressed(KeyCode::Space) {
-        for event in events.read() {
-            if player_entity == event.collider1 || player_entity == event.collider2 {
-                if Vec3::dot(event.max_force_direction, Vec3::Y).abs() > 0.8 {
-                    jumping = true;
+    if let Some((player_entity, mut player_impulse)) = player.iter_mut().next() {
+        let mut jumping = false;
+        if key.pressed(KeyCode::Space) {
+            let mut force = Vec3::ZERO;
+            for event in events.read() {
+                if player_entity == event.collider1 {
+                    force = force + event.max_force_direction;
+                } else if player_entity == event.collider2 {
+                    force = force - event.max_force_direction;
                 }
             }
+
+            if Vec3::dot(force, Vec3::Y).abs() > 0.8 {
+                jumping = true;
+            }
+        } else {
+            events.clear();
+        }
+
+        if jumping {
+            player_impulse.impulse = Vec3::new(0.0, 2.5, 0.0);
+        } else {
+            player_impulse.impulse = Vec3::ZERO;
         }
     } else {
+        // prevent events from collecting while the game is paused
         events.clear();
-    }
-
-    if jumping {
-        player_impulse.impulse = Vec3::new(0.0, 2.5, 0.0);
-    } else {
-        player_impulse.impulse = Vec3::ZERO;
     }
 }
 

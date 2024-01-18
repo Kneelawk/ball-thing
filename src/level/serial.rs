@@ -178,6 +178,9 @@ pub struct SerialPlane {
     #[knuffel(child)]
     pos: SerialVec3,
 
+    #[knuffel(children(name = "rot"))]
+    rotations: Vec<SerialRotation>,
+
     #[knuffel(argument)]
     size: f32,
 
@@ -187,6 +190,11 @@ pub struct SerialPlane {
 
 impl SerialObject for SerialPlane {
     fn spawn(&self, args: &mut SpawnArgs) -> Entity {
+        let mut rotation = Quat::default();
+        for rot in self.rotations.iter() {
+            rotation = rotation.mul_quat((*rot).into());
+        }
+
         let size = if let Some(size2) = self.size2 {
             Vec2::new(self.size, size2)
         } else {
@@ -196,7 +204,7 @@ impl SerialObject for SerialPlane {
         args.commands
             .spawn(LevelObject)
             .insert(SpatialBundle {
-                transform: Transform::from_translation(self.pos.into()),
+                transform: Transform::from_translation(self.pos.into()).with_rotation(rotation),
                 ..Default::default()
             })
             .with_children(|builder| {
